@@ -1,0 +1,40 @@
+notify_bot:
+  only: [merge_requests]
+  stage: build
+  script:
+    - curl -s -X POST https://api.telegram.org/bot$BOT_TOKEN/sendMessage -d parse_mode=HTML -d chat_id=$CHAT_BOT_ID -d text="💡New Merge Request!%0A👨‍💻$GITLAB_USER_NAME%0A%0AFrom <b>$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME</b>%0ATo <b>$CI_MERGE_REQUEST_TARGET_BRANCH_NAME</b>%0A%0AFor approve follow the link%0A🔗$CI_MERGE_REQUEST_PROJECT_URL/-/merge_requests/$CI_MERGE_REQUEST_IID"
+  tags:
+    - dev
+    - test
+
+build_image:
+  stage: build
+  script:
+    - curl -s -X POST https://api.telegram.org/bot$BOT_TOKEN/sendMessage -d chat_id=$CHAT_BOT_ID -d text="🔨New xSwap Backend Build Started%0A👨‍💻$GITLAB_USER_NAME"
+    - sudo docker build --no-cache -t git.dapp-devs.com:5050/xswap/backend:dev .
+    - echo $REGISTRY_PASSWORD | sudo docker login -u $REGISTRY_LOGIN --password-stdin git.dapp-devs.com:5050
+    - sudo docker image push git.dapp-devs.com:5050/xswap/backend:dev
+    - sudo docker rmi --force git.dapp-devs.com:5050/xswap/backend || true
+    - sudo docker rmi --force git.dapp-devs.com:5050/xswap/backend:dev || true
+    - sudo docker image prune -f || true
+  tags:
+    - dev
+    - test
+  only:
+    - main
+
+deploy_dev:
+  stage: deploy
+  script:
+    - curl -s -X POST https://api.telegram.org/bot$BOT_TOKEN/sendMessage -d chat_id=$CHAT_BOT_ID -d text="🤞xSwap Backend Deploy Started%0A👨‍💻$GITLAB_USER_NAME"
+    - echo "Updating xSwap Backend"
+    - ssh -o StrictHostKeyChecking=no lordikman@10.166.0.8 -t "sudo docker login -u $REGISTRY_LOGIN --password $REGISTRY_PASSWORD git.dapp-devs.com:5050"
+    - ssh -o StrictHostKeyChecking=no lordikman@10.166.0.8 -t "sudo docker-compose -f docker-compose-xswap.yml down || true"
+    - scp -o StrictHostKeyChecking=no docker-compose.yml lordikman@10.166.0.8:/home/lordikman/docker-compose-xswap.yml
+    - ssh -o StrictHostKeyChecking=no lordikman@10.166.0.8 -t "sudo docker-compose -f docker-compose-xswap.yml up -d"
+    - curl -s -X POST https://api.telegram.org/bot$BOT_TOKEN/sendMessage -d chat_id=$CHAT_BOT_ID -d text="🤞xSwap Backend Deploy Finished%0A👨‍💻$GITLAB_USER_NAME"
+  tags:
+    - dev
+    - test
+  only:
+    - main
